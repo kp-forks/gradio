@@ -1,9 +1,8 @@
 import gradio as gr
-import random
 
 secret_word = "gradio"
 
-with gr.Blocks() as demo:    
+with gr.Blocks() as demo:
     used_letters_var = gr.State([])
     with gr.Row() as row:
         with gr.Column():
@@ -28,7 +27,7 @@ with gr.Blocks() as demo:
             hangman: answer
         }
     btn.click(
-        guess_letter, 
+        guess_letter,
         [input_letter, used_letters_var],
         [used_letters_var, used_letters_box, hangman]
         )

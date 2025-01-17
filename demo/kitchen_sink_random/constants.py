@@ -1,11 +1,7 @@
 import numpy as np
-import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import random
 import os
-
 
 def random_plot():
     start_year = 2020
@@ -19,7 +15,6 @@ def random_plot():
     series += np.random.rand(year_count)
     ax.plot(x, series, plt_format)
     return fig
-
 
 img_dir = os.path.join(os.path.dirname(__file__), "files")
 file_dir = os.path.join(os.path.dirname(__file__), "..", "kitchen_sink", "files")
@@ -62,7 +57,6 @@ highlighted_text_output_2 = [
 ]
 
 highlighted_text = "Does Chicago have any Pakistani restaurants"
-
 
 def random_model3d():
     model_3d = random.choice(

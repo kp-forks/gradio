@@ -1,23 +1,19 @@
 import io
 import sys
-import unittest.mock as mock
 from contextlib import contextmanager
 from functools import partial
 from string import capwords
+from unittest.mock import MagicMock, patch
 
-import mlflow
+import httpx
 import pytest
-import requests
-import wandb
-from fastapi.testclient import TestClient
 
 import gradio
 from gradio.blocks import Blocks
+from gradio.components import Image, Textbox
 from gradio.interface import Interface, TabbedInterface, close_all, os
 from gradio.layouts import TabItem, Tabs
 from gradio.utils import assert_configs_are_equivalent_besides_ids
-
-os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
 
 
 @contextmanager
@@ -35,29 +31,54 @@ class TestInterface:
     def test_close(self):
         io = Interface(lambda input: None, "textbox", "label")
         _, local_url, _ = io.launch(prevent_thread_lock=True)
-        response = requests.get(local_url)
+        response = httpx.get(local_url)
         assert response.status_code == 200
         io.close()
         with pytest.raises(Exception):
-            response = requests.get(local_url)
+            response = httpx.get(local_url)
 
     def test_close_all(self):
         interface = Interface(lambda input: None, "textbox", "label")
-        interface.close = mock.MagicMock()
+        interface.close = MagicMock()
         close_all()
         interface.close.assert_called()
 
     def test_no_input_or_output(self):
         with pytest.raises(TypeError):
-            Interface(lambda x: x, examples=1234)
+            Interface(lambda x: x, examples=1234)  # type: ignore
 
     def test_partial_functions(self):
         def greet(name, formatter):
-            return formatter("Hello " + name + "!")
+            return formatter(f"Hello {name}!")
 
         greet_upper_case = partial(greet, formatter=capwords)
         demo = Interface(fn=greet_upper_case, inputs="text", outputs="text")
         assert demo("abubakar") == "Hello Abubakar!"
+
+    def test_input_labels_extracted_from_method(self):
+        class A:
+            def test(self, parameter_name):
+                return parameter_name
+
+        t = Textbox()
+        Interface(A().test, t, "text")
+        assert t.label == "parameter_name"
+
+        def test(parameter_name1, parameter_name2):
+            return parameter_name1
+
+        t = Textbox()
+        i = Image()
+        Interface(test, (t, i), "text")
+        assert t.label == "parameter_name1"
+        assert i.label == "parameter_name2"
+
+        def special_args_test(req: gradio.Request, parameter_name):
+            return parameter_name
+
+        t = Textbox()
+        Interface(special_args_test, t, "text")
+        assert t.label == "parameter_name"
 
     def test_examples_valid_path(self):
         path = os.path.join(
@@ -65,20 +86,11 @@ class TestInterface:
         )
         interface = Interface(lambda x: 3 * x, "number", "number", examples=path)
         dataset_check = any(
-            [c["type"] == "dataset" for c in interface.get_config_file()["components"]]
+            c["type"] == "dataset" for c in interface.get_config_file()["components"]
         )
         assert dataset_check
 
-    def test_test_launch(self):
-        with captured_output() as (out, err):
-            prediction_fn = lambda x: x
-            prediction_fn.__name__ = "prediction_fn"
-            interface = Interface(prediction_fn, "textbox", "label")
-            interface.test_launch()
-            output = out.getvalue().strip()
-            assert output == "Test launch: prediction_fn()... PASSED"
-
-    @mock.patch("time.sleep")
+    @patch("time.sleep")
     def test_block_thread(self, mock_sleep):
         with pytest.raises(KeyboardInterrupt):
             with captured_output() as (out, _):
@@ -87,19 +99,11 @@ class TestInterface:
                 interface.launch(prevent_thread_lock=False)
                 output = out.getvalue().strip()
                 assert (
-                    output == "Keyboard interruption in main thread... closing server."
+                    "Keyboard interruption in main thread... closing server." in output
                 )
 
-    @mock.patch("gradio.utils.colab_check")
-    def test_launch_colab_share(self, mock_colab_check):
-        mock_colab_check.return_value = True
-        interface = Interface(lambda x: x, "textbox", "label")
-        _, _, share_url = interface.launch(prevent_thread_lock=True)
-        assert share_url is None
-        interface.close()
-
-    @mock.patch("gradio.utils.colab_check")
-    @mock.patch("gradio.networking.setup_tunnel")
+    @patch("gradio.utils.colab_check")
+    @patch("gradio.networking.setup_tunnel")
     def test_launch_colab_share_error(self, mock_setup_tunnel, mock_colab_check):
         mock_setup_tunnel.side_effect = RuntimeError()
         mock_colab_check.return_value = True
@@ -109,21 +113,15 @@ class TestInterface:
         interface.close()
 
     def test_interface_representation(self):
-        prediction_fn = lambda x: x
+        def prediction_fn(x):
+            return x
+
         prediction_fn.__name__ = "prediction_fn"
         repr = str(Interface(prediction_fn, "textbox", "label")).split("\n")
         assert prediction_fn.__name__ in repr[0]
         assert len(repr[0]) == len(repr[1])
 
-    @pytest.mark.asyncio
-    async def test_interface_none_interp(self):
-        interface = Interface(lambda x: x, "textbox", "label", interpretation=[None])
-        scores = (await interface.interpret(["quickest brown fox"]))[0][
-            "interpretation"
-        ]
-        assert scores is None
-
-    @mock.patch("webbrowser.open")
+    @patch("webbrowser.open")
     def test_interface_browser(self, mock_browser):
         interface = Interface(lambda x: x, "textbox", "label")
         interface.launch(inbrowser=True, prevent_thread_lock=True)
@@ -141,7 +139,7 @@ class TestInterface:
         assert interface.examples_handler.dataset.get_config()["samples_per_page"] == 2
         interface.close()
 
-    @mock.patch("IPython.display.display")
+    @patch("IPython.display.display")
     def test_inline_display(self, mock_display):
         interface = Interface(lambda x: x, "textbox", "label")
         interface.launch(inline=True, prevent_thread_lock=True)
@@ -150,62 +148,52 @@ class TestInterface:
         assert mock_display.call_count == 2
         interface.close()
 
-    @mock.patch("comet_ml.Experiment")
-    def test_integration_comet(self, mock_experiment):
-        experiment = mock_experiment()
-        experiment.log_text = mock.MagicMock()
-        experiment.log_other = mock.MagicMock()
-        interface = Interface(lambda x: x, "textbox", "label")
-        interface.launch(prevent_thread_lock=True)
-        interface.integrate(comet_ml=experiment)
-        experiment.log_text.assert_called_with("gradio: " + interface.local_url)
-        interface.share_url = "tmp"  # used to avoid creating real share links.
-        interface.integrate(comet_ml=experiment)
-        experiment.log_text.assert_called_with("gradio: " + interface.share_url)
-        assert experiment.log_other.call_count == 2
-        interface.share_url = None
-        interface.close()
+    def test_setting_interactive_false(self):
+        output_textbox = Textbox()
+        Interface(lambda x: x, "textbox", output_textbox)
+        assert not output_textbox.get_config()["interactive"]
+        output_textbox = Textbox(interactive=True)
+        Interface(lambda x: x, "textbox", output_textbox)
+        assert output_textbox.get_config()["interactive"]
 
-    def test_integration_mlflow(self):
-        mlflow.log_param = mock.MagicMock()
-        interface = Interface(lambda x: x, "textbox", "label")
-        interface.launch(prevent_thread_lock=True)
-        interface.integrate(mlflow=mlflow)
-        mlflow.log_param.assert_called_with(
-            "Gradio Interface Local Link", interface.local_url
+    def test_get_api_info(self):
+        io = Interface(lambda x: x, Image(type="filepath"), "textbox")
+        api_info = io.get_api_info()
+        assert api_info
+        assert len(api_info["named_endpoints"]) == 1
+        assert len(api_info["unnamed_endpoints"]) == 0
+
+    def test_api_name(self):
+        io = Interface(lambda x: x, "textbox", "textbox", api_name="echo")
+        assert next(
+            (d for d in io.config["dependencies"] if d["api_name"] == "echo"),  # type: ignore
+            None,
         )
-        interface.share_url = "tmp"  # used to avoid creating real share links.
-        interface.integrate(mlflow=mlflow)
-        mlflow.log_param.assert_called_with(
-            "Gradio Interface Share Link", interface.share_url
+
+    def test_show_progress(self):
+        io = Interface(
+            lambda x: x, "textbox", "textbox", api_name="echo", show_progress="hidden"
         )
-        interface.share_url = None
-        interface.close()
+        dependency = next(
+            (d for d in io.config["dependencies"] if d["api_name"] == "echo"),  # type: ignore
+            None,
+        )
+        assert dependency and dependency["show_progress"] == "hidden"
 
-    def test_integration_wandb(self):
-        with captured_output() as (out, err):
-            wandb.log = mock.MagicMock()
-            wandb.Html = mock.MagicMock()
-            interface = Interface(lambda x: x, "textbox", "label")
-            interface.width = 500
-            interface.height = 500
-            interface.integrate(wandb=wandb)
+    def test_interface_in_blocks_does_not_error(self):
+        with Blocks():
+            Interface(fn=lambda x: x, inputs=Textbox(), outputs=Image())
 
-            assert (
-                out.getvalue().strip()
-                == "The WandB integration requires you to `launch(share=True)` first."
-            )
-            interface.share_url = "tmp"
-            interface.integrate(wandb=wandb)
-            wandb.log.assert_called_once()
+    def test_interface_with_built_ins(self):
+        t = Textbox()
+        Interface(fn=str, inputs=t, outputs=Textbox())
+        assert t.label == "input 0"
 
-    @mock.patch("requests.post")
-    def test_integration_analytics(self, mock_post):
-        mlflow.log_param = mock.MagicMock()
-        interface = Interface(lambda x: x, "textbox", "label")
-        interface.analytics_enabled = True
-        interface.integrate(mlflow=mlflow)
-        mock_post.assert_called_once()
+    def test_interface_additional_components_are_included_as_inputs(self):
+        t = Textbox()
+        s = gradio.Slider(0, 100)
+        io = Interface(fn=str, inputs=t, outputs=Textbox(), additional_inputs=s)
+        assert io.input_components == [t, s]
 
 
 class TestTabbedInterface:
@@ -225,48 +213,9 @@ class TestTabbedInterface:
         tabbed_interface = TabbedInterface([interface3, interface4], ["tab1", "tab2"])
 
         assert assert_configs_are_equivalent_besides_ids(
-            demo.get_config_file(), tabbed_interface.get_config_file()
+            demo.get_config_file(),  # type: ignore
+            tabbed_interface.get_config_file(),  # type: ignore
         )
-
-
-class TestDeprecatedInterface:
-    def test_deprecation_notice(self):
-        with pytest.warns(Warning):
-            _ = Interface(lambda x: x, "textbox", "textbox", verbose=True)
-
-
-class TestInterfaceInterpretation:
-    def test_interpretation_from_interface(self):
-        def quadratic(num1: float, num2: float) -> float:
-            return 3 * num1**2 + num2
-
-        iface = Interface(
-            fn=quadratic,
-            inputs=["number", "number"],
-            outputs="number",
-            interpretation="default",
-        )
-
-        app, _, _ = iface.launch(prevent_thread_lock=True)
-        client = TestClient(app)
-
-        btn = next(
-            c["id"]
-            for c in iface.config["components"]
-            if c["props"].get("value") == "Interpret"
-        )
-        fn_index = next(
-            i
-            for i, d in enumerate(iface.config["dependencies"])
-            if d["targets"] == [btn]
-        )
-
-        response = client.post(
-            "/api/predict/", json={"fn_index": fn_index, "data": [10, 50, 350]}
-        )
-        assert response.json()["data"][0]["interpretation"] is not None
-        iface.close()
-        close_all()
 
 
 @pytest.mark.parametrize(
@@ -312,3 +261,31 @@ def test_interface_adds_stop_button(interface_type, live, use_generator):
         assert has_stop
     else:
         assert not has_stop
+
+
+def test_live_interface_sets_always_last():
+    iface = gradio.Interface(
+        fn=lambda s: s,
+        inputs=gradio.Textbox(lines=2, placeholder="Hello 👋", label="Input Sentence"),
+        outputs=gradio.Markdown(),
+        live=True,  # Set live to True for real-time feedback
+    )
+    config = iface.get_config_file()
+    assert "dependencies" in config
+    for dep in config["dependencies"]:
+        if dep["targets"][0][1] == "change":
+            assert dep["trigger_mode"] == "always_last"
+            return
+    raise AssertionError("No change dependency found")
+
+
+def test_tabbed_interface_predictions(connect):
+    hello_world = gradio.Interface(lambda name: "Hello " + name, "text", "text")
+    bye_world = gradio.Interface(lambda name: "Bye " + name, "text", "text")
+
+    demo = gradio.TabbedInterface(
+        [hello_world, bye_world], ["Hello World", "Bye World"]
+    )
+    with connect(demo) as client:
+        assert client.predict("Emily", api_name="/predict") == "Hello Emily"
+        assert client.predict("Hannah", api_name="/predict") == "Hello Hannah"

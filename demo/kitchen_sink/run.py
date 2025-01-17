@@ -8,7 +8,6 @@ import gradio as gr
 CHOICES = ["foo", "bar", "baz"]
 JSONOBJ = """{"items":{"item":[{"id": "0001","type": null,"is_good": false,"ppu": 0.55,"batters":{"batter":[{ "id": "1001", "type": "Regular" },{ "id": "1002", "type": "Chocolate" },{ "id": "1003", "type": "Blueberry" },{ "id": "1004", "type": "Devil's Food" }]},"topping":[{ "id": "5001", "type": "None" },{ "id": "5002", "type": "Glazed" },{ "id": "5005", "type": "Sugar" },{ "id": "5007", "type": "Powdered Sugar" },{ "id": "5006", "type": "Chocolate with Sprinkles" },{ "id": "5003", "type": "Chocolate" },{ "id": "5004", "type": "Maple" }]}]}}"""
 
-
 def fn(
     text1,
     text2,
@@ -19,16 +18,16 @@ def fn(
     checkboxes,
     radio,
     dropdown,
+    multi_dropdown,
     im1,
-    im2,
-    im3,
+    # im2,
+    # im3,
     im4,
     video,
     audio1,
     audio2,
     file,
     df1,
-    df2,
 ):
     return (
         (text1 if single_checkbox else text2)
@@ -72,7 +71,7 @@ def fn(
             ("dogs", 0.4),
             (".", 0),
         ]
-        + [(f"test", x / 10) for x in range(-10, 10)],  # HighlightedText
+        + [("test", x / 10) for x in range(-10, 10)],  # HighlightedText
         json.loads(JSONOBJ),  # JSON
         "<button style='background-color: red'>Click Me: "
         + radio
@@ -80,7 +79,6 @@ def fn(
         os.path.join(os.path.dirname(__file__), "files/titanic.csv"),
         df1,  # Dataframe
         np.random.randint(0, 10, (4, 4)),  # Dataframe
-        df2,  # Timeseries
     )
 
 demo = gr.Interface(
@@ -92,30 +90,33 @@ demo = gr.Interface(
         gr.Slider(10, 20, value=15, label="Slider: 10 - 20"),
         gr.Slider(maximum=20, step=0.04, label="Slider: step @ 0.04"),
         gr.Checkbox(label="Checkbox"),
-        gr.CheckboxGroup(
-            label="CheckboxGroup", choices=CHOICES, value=CHOICES[0:2]
-        ),
+        gr.CheckboxGroup(label="CheckboxGroup", choices=CHOICES, value=CHOICES[0:2]),
         gr.Radio(label="Radio", choices=CHOICES, value=CHOICES[2]),
         gr.Dropdown(label="Dropdown", choices=CHOICES),
+        gr.Dropdown(
+            label="Multiselect Dropdown (Max choice: 2)",
+            choices=CHOICES,
+            multiselect=True,
+            max_choices=2,
+        ),
         gr.Image(label="Image"),
-        gr.Image(label="Image w/ Cropper", tool="select"),
-        gr.Image(label="Sketchpad", source="canvas"),
-        gr.Image(label="Webcam", source="webcam"),
+        # gr.Image(label="Image w/ Cropper", tool="select"),
+        # gr.Image(label="Sketchpad", source="canvas"),
+        gr.Image(label="Webcam", sources=["webcam"]),
         gr.Video(label="Video"),
         gr.Audio(label="Audio"),
-        gr.Audio(label="Microphone", source="microphone"),
+        gr.Audio(label="Microphone", sources=["microphone"]),
         gr.File(label="File"),
         gr.Dataframe(label="Dataframe", headers=["Name", "Age", "Gender"]),
-        gr.Timeseries(x="time", y=["price", "value"], colors=["pink", "purple"]),
     ],
     outputs=[
         gr.Textbox(label="Textbox"),
         gr.Label(label="Label"),
         gr.Audio(label="Audio"),
-        gr.Image(label="Image"),
+        gr.Image(label="Image", elem_id="output-img"),
         gr.Video(label="Video"),
-        gr.HighlightedText(label="HighlightedText").style(
-            color_map={"punc": "pink", "test 0": "blue"}
+        gr.HighlightedText(
+            label="HighlightedText", color_map={"punc": "pink", "test 0": "blue"}
         ),
         gr.HighlightedText(label="HighlightedText", show_legend=True),
         gr.JSON(label="JSON"),
@@ -123,7 +124,6 @@ demo = gr.Interface(
         gr.File(label="File"),
         gr.Dataframe(label="Dataframe"),
         gr.Dataframe(label="Numpy"),
-        gr.Timeseries(x="time", y=["price", "value"], label="Timeseries"),
     ],
     examples=[
         [
@@ -136,24 +136,23 @@ demo = gr.Interface(
             ["foo", "baz"],
             "baz",
             "bar",
+            ["foo", "bar"],
             os.path.join(os.path.dirname(__file__), "files/cheetah1.jpg"),
-            os.path.join(os.path.dirname(__file__), "files/cheetah1.jpg"),
-            os.path.join(os.path.dirname(__file__), "files/cheetah1.jpg"),
+            # os.path.join(os.path.dirname(__file__), "files/cheetah1.jpg"),
+            # os.path.join(os.path.dirname(__file__), "files/cheetah1.jpg"),
             os.path.join(os.path.dirname(__file__), "files/cheetah1.jpg"),
             os.path.join(os.path.dirname(__file__), "files/world.mp4"),
             os.path.join(os.path.dirname(__file__), "files/cantina.wav"),
             os.path.join(os.path.dirname(__file__), "files/cantina.wav"),
             os.path.join(os.path.dirname(__file__), "files/titanic.csv"),
-            [[1, 2, 3], [3, 4, 5]],
-            os.path.join(os.path.dirname(__file__), "files/time.csv"),
+            [[1, 2, 3, 4], [4, 5, 6, 7], [8, 9, 1, 2], [3, 4, 5, 6]],
         ]
     ]
     * 3,
-    theme="default",
     title="Kitchen Sink",
     description="Try out all the components!",
     article="Learn more about [Gradio](http://gradio.app)",
-    cache_examples=True
+    cache_examples=True,
 )
 
 if __name__ == "__main__":

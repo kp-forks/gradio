@@ -1,23 +1,21 @@
 import gradio as gr
 
-title = "GPT-J-6B"
-
 tts_examples = [
     "I love learning machine learning",
     "How do you do?",
 ]
 
-tts_demo = gr.Interface.load(
+tts_demo = gr.load(
     "huggingface/facebook/fastspeech2-en-ljspeech",
     title=None,
     examples=tts_examples,
     description="Give me something to say!",
 )
 
-stt_demo = gr.Interface.load(
+stt_demo = gr.load(
     "huggingface/facebook/wav2vec2-base-960h",
     title=None,
-    inputs="mic",
+    inputs=gr.Microphone(type="filepath"),
     description="Let me try to guess what you're saying!",
 )
 

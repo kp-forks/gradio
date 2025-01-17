@@ -9,7 +9,6 @@ import gradio as gr
 current_dir = os.path.dirname(os.path.realpath(__file__))
 data = pd.read_csv(os.path.join(current_dir, "files/titanic.csv"))
 
-
 def encode_age(df):
     df.Age = df.Age.fillna(-0.5)
     bins = (-1, 0, 5, 12, 18, 25, 35, 60, 120)
@@ -17,14 +16,12 @@ def encode_age(df):
     df.Age = categories
     return df
 
-
 def encode_fare(df):
     df.Fare = df.Fare.fillna(-0.5)
     bins = (-1, 0, 8, 15, 31, 1000)
     categories = pd.cut(df.Fare, bins, labels=False)
     df.Fare = categories
     return df
-
 
 def encode_df(df):
     df = encode_age(df)
@@ -52,7 +49,6 @@ def encode_df(df):
     ]
     return df
 
-
 train = encode_df(data)
 
 X_all = train.drop(["Survived", "PassengerId"], axis=1)
@@ -67,7 +63,6 @@ clf = RandomForestClassifier()
 clf.fit(X_train, y_train)
 predictions = clf.predict(X_test)
 
-
 def predict_survival(passenger_class, is_male, age, company, fare, embark_point):
     if passenger_class is None or embark_point is None:
         return None
@@ -76,18 +71,17 @@ def predict_survival(passenger_class, is_male, age, company, fare, embark_point)
             "Pclass": [passenger_class + 1],
             "Sex": [0 if is_male else 1],
             "Age": [age],
-            "Company": [
-                (1 if "Sibling" in company else 0) + (2 if "Child" in company else 0)
-            ],
             "Fare": [fare],
             "Embarked": [embark_point + 1],
+            "Company": [
+                (1 if "Sibling" in company else 0) + (2 if "Child" in company else 0)
+            ]
         }
     )
     df = encode_age(df)
     df = encode_fare(df)
     pred = clf.predict_proba(df)[0]
     return {"Perishes": float(pred[0]), "Survives": float(pred[1])}
-
 
 demo = gr.Interface(
     predict_survival,
@@ -105,7 +99,6 @@ demo = gr.Interface(
         ["second", False, 40, ["Sibling", "Child"], 10, "Q"],
         ["third", True, 30, ["Child"], 20, "S"],
     ],
-    interpretation="default",
     live=True,
 )
 

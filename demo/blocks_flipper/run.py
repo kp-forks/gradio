@@ -19,11 +19,18 @@ with gr.Blocks() as demo:
             image_output = gr.Image()
         image_button = gr.Button("Flip")
 
-    with gr.Accordion("Open for More!"):
+    with gr.Accordion("Open for More!", open=False):
         gr.Markdown("Look at me...")
+        temp_slider = gr.Slider(
+            0, 1,
+            value=0.1,
+            step=0.1,
+            interactive=True,
+            label="Slide me",
+        )
 
     text_button.click(flip_text, inputs=text_input, outputs=text_output)
     image_button.click(flip_image, inputs=image_input, outputs=image_output)
-    
+
 if __name__ == "__main__":
     demo.launch()

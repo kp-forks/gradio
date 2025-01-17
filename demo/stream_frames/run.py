@@ -5,8 +5,8 @@ def flip(im):
     return np.flipud(im)
 
 demo = gr.Interface(
-    flip, 
-    gr.Image(source="webcam", streaming=True), 
+    flip,
+    gr.Image(sources=["webcam"], streaming=True),
     "image",
     live=True
 )

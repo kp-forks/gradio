@@ -5,7 +5,6 @@ import numpy as np
 from PIL import Image
 import open3d as o3d
 from pathlib import Path
-import os
 
 feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large")
 model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
@@ -18,11 +17,11 @@ def process_image(image_path):
         Image.Resampling.LANCZOS)
 
     # prepare image for the model
-    encoding = feature_extractor(image, return_tensors="pt")
+    encoding = feature_extractor(image, return_tensors="pt")  # type: ignore
 
     # forward pass
     with torch.no_grad():
-        outputs = model(**encoding)
+        outputs = model(**encoding)  # type: ignore
         predicted_depth = outputs.predicted_depth
 
     # interpolate to original size
@@ -38,7 +37,7 @@ def process_image(image_path):
         gltf_path = create_3d_obj(np.array(image), depth_image, image_path)
         img = Image.fromarray(depth_image)
         return [img, gltf_path, gltf_path]
-    except Exception as e:
+    except Exception:
         gltf_path = create_3d_obj(
             np.array(image), depth_image, image_path, depth=8)
         img = Image.fromarray(depth_image)
@@ -46,7 +45,6 @@ def process_image(image_path):
     except:
         print("Error reconstructing 3D model")
         raise Exception("Error reconstructing 3D model")
-
 
 def create_3d_obj(rgb_image, depth_image, image_path, depth=10):
     depth_o3d = o3d.geometry.Image(depth_image)
@@ -79,7 +77,7 @@ def create_3d_obj(rgb_image, depth_image, image_path, depth=10):
                    [0, 0, 0, 1]])
 
     print('run Poisson surface reconstruction')
-    with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug) as cm:
+    with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug):
         mesh_raw, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
             pcd, depth=depth, width=0, scale=1.1, linear_fit=True)
 
@@ -106,13 +104,13 @@ iface = gr.Interface(fn=process_image,
                      inputs=[gr.Image(
                          type="filepath", label="Input Image")],
                      outputs=[gr.Image(label="predicted depth", type="pil"),
-                              gr.Model3D(label="3d mesh reconstruction", clear_color=[
-                                                 1.0, 1.0, 1.0, 1.0]),
+                              gr.Model3D(label="3d mesh reconstruction", clear_color=(
+                                                 1.0, 1.0, 1.0, 1.0)),
                               gr.File(label="3d gLTF")],
                      title=title,
                      description=description,
                      examples=examples,
-                     allow_flagging="never",
+                     flagging_mode="never",
                      cache_examples=False)
 
-iface.launch(debug=True, enable_queue=False)
+iface.launch(debug=True)
